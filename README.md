@@ -13,16 +13,17 @@ It does the following changes to interaction between Steam API and the server:
 
 ## How to use it?
 
-1. Download the library (.dll or .so) file for your OS in [releases](https://github.com/Nuclearistt/TEKWrapper/releases)
-2. **Windows**: 
+1. Setup a dedicated server unless you have already, the wiki has a good [tutorial](https://ark.fandom.com/wiki/Dedicated_server_setup) for that. **Do not** install TEK Wrapper on your client installation, it will remove client functionality, use it **only** on **separate** dedicated server installations
+2. Download the library file (.dll for Windows or .so for Linux) in [releases](https://github.com/Nuclearistt/TEKWrapper/releases)
+3. **If you run Windows**: 
    - Go to **{Server root}\Engine\Binaries\ThirdParty\Steamworks\Steamv132\Win64**, there rename **steam_api64.dll** to **steam_api64_o.dll** and move it to **{Server root}\ShooterGame\Binaries\Win64**
    - Put the downloaded **steam_api64.dll** into **{Server root}\Engine\Binaries\ThirdParty\Steamworks\Steamv132\Win64**
 
-   **Linux**:
+   **If you run Linux**:
    - Go to **{Server root}/Engine/Binaries/Linux**, there rename **libsteam_api.so** to **libsteam_api_o.so**
    - Put the downloaded **libsteam_api.so** into **{Server root}/Engine/Binaries/Linux**
-3. Make sure to have *-NoBattlEye* in server command-line parameters, client-side [TEK Injector](https://github.com/Nuclearistt/TEKInjector) doesn't support BattlEye, so people using it won't be able to join your server if you have BE enabled
-4. If you want to provide extra information about your server/cluster, add *-TWInfoFileUrl=url* to command-line parameters (for example: *-TWInfoFileUrl=https://example.com/Info.json*). The URL must point to a valid json file that can be accessed by any outside user, its format is described below. If you host a cluster, it's recommended to use the same file URL for all servers of the cluster if they have the same description and naming policy, TEK Launcher takes advantage of that by caching the file so it doesn't have to be downloaded multiple times
+4. Make sure to have *-NoBattlEye* in server command-line parameters, client-side [TEK Injector](https://github.com/Nuclearistt/TEKInjector) doesn't support BattlEye, so people using it won't be able to join your server if you have BE enabled
+5. If you want to provide extra information about your server/cluster, add *-TWInfoFileUrl=url* to command-line parameters (for example: *-TWInfoFileUrl=https://example.com/Info.json*). The URL must point to a valid json file that can be accessed by any outside user, its format is described below. If you host a cluster, it's recommended to use the same file URL for all servers of the cluster if they have the same description and naming policy, TEK Launcher takes advantage of that by caching the file so it doesn't have to be downloaded multiple times
 
 ## Server info file format
 
@@ -63,10 +64,10 @@ Example:
   }
 }
 ```
-Every property in the object is optional, you may include only those that you want
+Every property in the object is optional, so you can remove any property that you don't need (e.g if you have default value for it, or you don't have any "Other" features) from the example
 
 - **HosterName**: (Nick)name of server and/or cluster owner
-- **ServerName**: Name of the server to be displayed in the launcher. If not specified at all, the name will be taken from Steam query response (which is the same one that you specified as session name in server command-line parameters or GameUserSettings.ini). If its value is *""*, the name will be just the map name (you would want to use that in clusters). This property has no effect if your server is not member of any cluster
+- **ServerName**: Name of the server to be displayed in the launcher. If not specified at all, the name will be taken from Steam query response (which is the same one that you specified as session name in server command-line parameters or GameUserSettings.ini). If its value is *""*, the name will be just the map name (you would want to use that in clusters). This property has no effect if your server is not member of any cluster. You should not set it or set it to anything other than *""* if you use the same json file for all servers in cluster, that will lead to all servers in your cluster being displayed with exactly the same name
 - **ClusterName**: Name of the cluster to be displayed if your server is member of one. All servers within the cluster should have the same ClusterName, otherwise it's undefined which one will be used. This property has no effect if your server is not member of any cluster
 - **IconUrl**: URL of the cluster's icon, it should be an image with dimensions 128x128 pixels, other sizes are allowed but are not that optimal and will be stretched. The format is irrelevant but JPEG and PNG are preferred
 - **Discord**: Invite link for your server/cluster's Discord server. Only URLs starting with *https://discord.gg/* are allowed
@@ -79,7 +80,7 @@ Every property in the object is optional, you may include only those that you wa
   + **Harvesting**: Harvest amount multiplier
   + **Breeding**: Egg hatch and/or baby mature speed multiplier
   + **Stacks**: The most common multiplier for item stack sizes
-  + **Other**: Extra description lines that you may define yourself, this is an array that cannot have more than 6 elements
+  + **Other**: Extra description lines that you may define yourself, this is an array of strings that cannot have more than 6 elements
 
 ## How does it work?
 
@@ -88,7 +89,7 @@ The lifetime of TEK Wrapper is the following:
 - TEK Wrapper's *SteamGameServer_Init* is called, which in turn loads the original steam_api64.dll/libsteam_api.so and imports some of its functions
 - Active mods list is searched for in GameUserSettings.ini and command line
 - Command line is searched for *-TWInfoFileUrl* parameter
-- Certain function pointers in Steam API interfaces are replaced so they point to TEK Wrappers's functions, others are made to forward the call to the same function in original library
+- Certain function pointers in Steam API interfaces are replaced so they point to TEK Wrappers's functions
 
 ## License
 
