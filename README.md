@@ -1,29 +1,26 @@
 # TEK Wrapper
-[![Discord](https://img.shields.io/discord/937821572285206659?style=flat-square&label=Discord&logo=discord&logoColor=white&color=7289DA)](https://discord.gg/47SFqqMBFN)
+[![Discord](https://img.shields.io/discord/937821572285206659?style=flat-square&label=Discord&logo=discord&logoColor=white&color=7289DA)](https://discord.gg/JBUgcwvpfc)
 
-This repository contains the code for TEK Wrapper
+## Oveview
 
-## What is it?
-
-TEK Wrapper is a library for ARK: Survival Evolved dedicated servers that replaces Steam API and some of its functions while redirecting other ones to original Steam API  
-It does the following changes to interaction between Steam API and the server:
-- All incoming user connections are accepted no matter if they pass Steam checks or not
+TEK Wrapper is a library for ARK: Survival Evolved dedicated server that does the following changes to its behaviour:
+- All incoming user connections are accepted no matter if they pass Steam's ownership checks or not (allows users that don't own the game and/or DLCs to join)
 - All users are assumed to have all Steam app licenses
 - Steam server rules query response is modified to include additional information about the server, which consists of the mark to identify that TEK Wrapper is used, active mods list and optionally a URL to file with extra server description that can be displayed in [TEK Launcher](https://github.com/Nuclearistt/TEKLauncher)
 
-## How to use it?
+## How to use
 
-1. Setup a dedicated server unless you have already, the wiki has a good [tutorial](https://ark.fandom.com/wiki/Dedicated_server_setup) for that. **Do not** install TEK Wrapper on your client installation, it will remove client functionality, use it **only** on **separate** dedicated server installations
-2. Download the library file (.dll for Windows or .so for Linux) in [releases](https://github.com/Nuclearistt/TEKWrapper/releases)
-3. **If you run Windows**: 
-   - Go to **{Server root}\Engine\Binaries\ThirdParty\Steamworks\Steamv132\Win64**, there rename **steam_api64.dll** to **steam_api64_o.dll** and move it to **{Server root}\ShooterGame\Binaries\Win64**
-   - Put the downloaded **steam_api64.dll** into **{Server root}\Engine\Binaries\ThirdParty\Steamworks\Steamv132\Win64**
+1. Setup a dedicated server unless you have already, the wiki has a good [tutorial](https://ark.wiki.gg/wiki/Dedicated_server_setup) for that. **Do not** install TEK Wrapper on your client installation, it will remove client functionality, use it **only** on **separate** dedicated server installations
+2. Download the library file (steam_api64.dll if you run Windows / libsteam_api.so if you run Linux) in [releases](https://github.com/Nuclearistt/TEKWrapper/releases)
+3. **{Server root}** below is your dedicated server installation folder  
+  **If you run Windows**: 
+   - Go to **{Server root}\Engine\Binaries\ThirdParty\Steamworks\Steamv132\Win64** folder, there rename **steam_api64.dll** to **steam_api64_o.dll** and move it to **{Server root}\ShooterGame\Binaries\Win64** folder
+   - Put the **steam_api64.dll** you downloaded in step 2 into **{Server root}\Engine\Binaries\ThirdParty\Steamworks\Steamv132\Win64** folder
 
    **If you run Linux**:
-   - Go to **{Server root}/Engine/Binaries/Linux**, there rename **libsteam_api.so** to **libsteam_api_o.so**
-   - Put the downloaded **libsteam_api.so** into **{Server root}/Engine/Binaries/Linux**
-4. Make sure to have *-NoBattlEye* in server command-line parameters, client-side [TEK Injector](https://github.com/Nuclearistt/TEKInjector) doesn't support BattlEye, so people using it won't be able to join your server if you have BE enabled
-5. If you want to provide extra information about your server/cluster, add *-TWInfoFileUrl=url* to command-line parameters (for example: *-TWInfoFileUrl=https://example.com/Info.json*). The URL must point to a valid json file that can be accessed by any outside user, its format is described below. If you host a cluster, it's recommended to use the same file URL for all servers of the cluster if they have the same description and naming policy, TEK Launcher takes advantage of that by caching the file so it doesn't have to be downloaded multiple times
+   - Go to **{Server root}/Engine/Binaries/Linux** folder, there rename **libsteam_api.so** to **libsteam_api_o.so**
+   - Put the **libsteam_api.so** you downloaded in step 2 into **{Server root}/Engine/Binaries/Linux** folder
+4. If you want to provide extra information about your server/cluster to be displayed in TEK Launcher, add *-TWInfoFileUrl=url* to its command-line arguments (for example: *-TWInfoFileUrl=https://example.com/Info.json*). The URL must point to a valid json file (actual file content, not some website UI with a download button or anything like that) that can be accessed by any outside user, its format is described below. If you host a cluster, it's recommended to use the same file URL for all servers of the cluster if they have the same description and naming policy, TEK Launcher takes advantage of that by caching the file so it doesn't have to be downloaded multiple times
 
 ## Server info file format
 
