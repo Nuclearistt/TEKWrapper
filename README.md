@@ -20,7 +20,8 @@ TEK Wrapper is a library for ARK: Survival Evolved dedicated server that does th
    **If you run Linux**:
    - Go to **{Server root}/Engine/Binaries/Linux** folder, there rename **libsteam_api.so** to **libsteam_api_o.so**
    - Put the **libsteam_api.so** you downloaded in step 2 into **{Server root}/Engine/Binaries/Linux** folder
-4. If you want to provide extra information about your server/cluster to be displayed in TEK Launcher, add *-TWInfoFileUrl=url* to its command-line arguments (for example: *-TWInfoFileUrl=https://example.com/Info.json*). The URL must point to a valid json file (actual file content, not some website UI with a download button or anything like that) that can be accessed by any outside user, its format is described below. If you host a cluster, it's recommended to use the same file URL for all servers of the cluster if they have the same description and naming policy, TEK Launcher takes advantage of that by caching the file so it doesn't have to be downloaded multiple times
+4. Make sure to have *-NoBattlEye* in server command-line arguments, ARK Shellcode for client side doesn't support BattlEye so enabling it would prevent many players from being able to join your server
+5. If you want to provide extra information about your server/cluster to be displayed in TEK Launcher, add *-TWInfoFileUrl=url* to its command-line arguments (for example: *-TWInfoFileUrl=https://example.com/Info.json*). The URL must point to a valid json file (actual file content, not some website UI with a download button or anything like that) that can be accessed by any outside user, its format is described below. If you host a cluster, it's recommended to use the same file URL for all servers of the cluster if they have the same description and naming policy, TEK Launcher takes advantage of that by caching the file so it doesn't have to be downloaded multiple times
 
 ## Server info file format
 
