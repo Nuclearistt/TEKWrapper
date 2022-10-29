@@ -1,27 +1,24 @@
 # TEK Wrapper
 [![Discord](https://img.shields.io/discord/937821572285206659?style=flat-square&label=Discord&logo=discord&logoColor=white&color=7289DA)](https://discord.gg/JBUgcwvpfc)
 
-## Oveview
+## Overview
 
-TEK Wrapper is a library for ARK: Survival Evolved dedicated server that does the following changes to its behaviour:
-- All incoming user connections are accepted no matter if they pass Steam's ownership checks or not (allows users that don't own the game and/or DLCs to join)
-- All users are assumed to have all Steam app licenses
-- Steam server rules query response is modified to include additional information about the server, which consists of the mark to identify that TEK Wrapper is used, active mods list and optionally a URL to file with extra server description that can be displayed in [TEK Launcher](https://github.com/Nuclearistt/TEKLauncher)
+TEK Wrapper is a library for ARK: Survival Evolved dedicated server that allows users that don't own the game and/or DLCs to join by ignoring the result of Steam's ownership checks, and also modifies Steam server rules query response to include additional information about the server, which consists of the mark to identify that TEK Wrapper is used, active mods list and optionally a URL to file with extra server description that can be displayed in [TEK Launcher](https://github.com/Nuclearistt/TEKLauncher)
 
 ## How to use
 
-1. Setup a dedicated server unless you have already, the wiki has a good [tutorial](https://ark.wiki.gg/wiki/Dedicated_server_setup) for that. **Do not** install TEK Wrapper on your client installation, it will remove client functionality, use it **only** on **separate** dedicated server installations
-2. Download the library file (steam_api64.dll if you run Windows / libsteam_api.so if you run Linux) in [releases](https://github.com/Nuclearistt/TEKWrapper/releases)
-3. **{Server root}** below is your dedicated server installation folder  
-  **If you run Windows**: 
+1. Setup a dedicated server unless you have already done it, the wiki has a good [tutorial](https://ark.wiki.gg/wiki/Dedicated_server_setup) for that. **Do not** install TEK Wrapper on your client installation if you use TEK Launcher to run the game, it doesn't allow steam_api64.dll modifications, and it is a good practice in general to install dedicated server separately
+2. Download the library file (steam_api64.dll if your server runs on Windows or libsteam_api.so if it runs on Linux) in [releases](https://github.com/Nuclearistt/TEKWrapper/releases)
+3. (**{Server root}** below is your dedicated server installation folder)  
+  **For Windows-run servers**: 
    - Go to **{Server root}\Engine\Binaries\ThirdParty\Steamworks\Steamv132\Win64** folder, there rename **steam_api64.dll** to **steam_api64_o.dll** and move it to **{Server root}\ShooterGame\Binaries\Win64** folder
    - Put the **steam_api64.dll** you downloaded in step 2 into **{Server root}\Engine\Binaries\ThirdParty\Steamworks\Steamv132\Win64** folder
 
-   **If you run Linux**:
+   **For Linux-run servers**:
    - Go to **{Server root}/Engine/Binaries/Linux** folder, there rename **libsteam_api.so** to **libsteam_api_o.so**
    - Put the **libsteam_api.so** you downloaded in step 2 into **{Server root}/Engine/Binaries/Linux** folder
-4. Make sure to have *-NoBattlEye* in server command-line arguments, ARK Shellcode for client side doesn't support BattlEye so enabling it would prevent many players from being able to join your server
-5. If you want to provide extra information about your server/cluster to be displayed in TEK Launcher, add *-TWInfoFileUrl=url* to its command-line arguments (for example: *-TWInfoFileUrl=https://example.com/Info.json*). The URL must point to a valid json file (actual file content, not some website UI with a download button or anything like that) that can be accessed by any outside user, its format is described below. If you host a cluster, it's recommended to use the same file URL for all servers of the cluster if they have the same description and naming policy, TEK Launcher takes advantage of that by caching the file so it doesn't have to be downloaded multiple times
+4. Make sure to have *-NoBattlEye* in server command-line arguments, ARK Shellcode for client side doesn't support BattlEye so enabling it would neglect the main feature of TEK Wrapper
+5. If you want to provide extra information about your server/cluster to be displayed in TEK Launcher, add *-TWInfoFileUrl=url* to its command-line arguments (for example: *-TWInfoFileUrl=https://example.com/Info.json*). The URL must point to a valid json file or **direct** download link for one, that can be accessed by any outside user. The format of the file is described in next section. If you host a cluster, it's recommended to use the same file URL for all servers of the cluster if they have the same description and naming policy, TEK Launcher takes advantage of that by caching the file so it doesn't have to be downloaded multiple times
 
 ## Server info file format
 
@@ -65,8 +62,8 @@ Example:
 Every property in the object is optional, so you can remove any property that you don't need (e.g if you have default value for it, or you don't have any "Other" features) from the example
 
 - **HosterName**: (Nick)name of server and/or cluster owner
-- **ServerName**: Name of the server to be displayed in the launcher. If not specified at all, the name will be taken from Steam query response (which is the same one that you specified as session name in server command-line parameters or GameUserSettings.ini). If its value is *""*, the name will be just the map name (you would want to use that in clusters). This property has no effect if your server is not member of any cluster. You should not set it or set it to anything other than *""* if you use the same json file for all servers in cluster, that will lead to all servers in your cluster being displayed with exactly the same name
-- **ClusterName**: Name of the cluster to be displayed if your server is member of one. All servers within the cluster should have the same ClusterName, otherwise it's undefined which one will be used. This property has no effect if your server is not member of any cluster
+- **ServerName**: Name of the server to be displayed in the launcher. If not specified at all, the name will be taken from Steam query response (which is the same one that you specified as session name in server command-line arguments or GameUserSettings.ini). If its value is *""*, the name will be just the map name (you would want to use that in clusters). This property has no effect if your server is not part of a cluster. You should not set it or set it to anything other than *""* if you use the same json file for all servers in cluster, that will lead to all servers in your cluster being displayed with exactly the same name
+- **ClusterName**: Name of the cluster to be displayed if your server is member of one. All servers within the cluster should have the same ClusterName, otherwise it's undefined which one will be used. This property has no effect if your server is not part of a cluster
 - **IconUrl**: URL of the cluster's icon, it should be an image with dimensions 128x128 pixels, other sizes are allowed but are not that optimal and will be stretched. The format is irrelevant but JPEG and PNG are preferred
 - **Discord**: Invite link for your server/cluster's Discord server. Only URLs starting with *https://discord.gg/* are allowed
 - **ServerDescription**: Description object for specific server the file is used for, typically you want it to be unspecified in clusters, but if specified it should describe differences of this server from the rest of servers in the cluster
@@ -78,16 +75,11 @@ Every property in the object is optional, so you can remove any property that yo
   + **Harvesting**: Harvest amount multiplier
   + **Breeding**: Egg hatch and/or baby mature speed multiplier
   + **Stacks**: The most common multiplier for item stack sizes
-  + **Other**: Extra description lines that you may define yourself, this is an array of strings that cannot have more than 6 elements
+  + **Other**: An array of up to 6 extra description lines that you may define yourself
 
 ## How does it work?
 
-The lifetime of TEK Wrapper is the following:
-- The server process loads TEK Wrapper library based on its path
-- TEK Wrapper's *SteamGameServer_Init* is called, which in turn loads the original steam_api64.dll/libsteam_api.so and imports some of its functions
-- Active mods list is searched for in GameUserSettings.ini and command line
-- Command line is searched for *-TWInfoFileUrl* parameter
-- Certain function pointers in Steam API interfaces are replaced so they point to TEK Wrappers's functions
+TEK Wrapper binaries forward all function calls that are not wrapped by it to the original Steam API. On Windows it's achieved by making the same DLL export table as in the original Steam API DLL except that its elements point to functions with the same name in steam_api64_o.dll (which implicitly links it) with exception for wrapped functions that are implemented in TEK Wrapper's dll and call their real counterparts via entries in import table. On Linux there is no separation between exported and imported symbols, so TEKWrapper's binary just doesn't define any symbols it doesn't wrap and specifies libsteam_api_o.so as "needed" in its dynamic section, so it'll be loaded by dynamic linker and server's lookup for other symbols will end up there; addresses for real counterparts of wrapper functions are obtained via dlopen and dlsym. SteamAPI_RegisterCallback's wrapper prevents registering GSClientDeny callback and intercepts pointer of GSClientApprove callback for further use. SteamGameServer_Init's wrapper loads mods list and info file URL if present and constructs description line to be sent in Steam server queries, then initializes Steam API and replaces DLL's internal pointer to ISteamGameServer with a wrapper that overrides certain method calls with calls to its own functions and redirects the others to original interface
 
 ## License
 

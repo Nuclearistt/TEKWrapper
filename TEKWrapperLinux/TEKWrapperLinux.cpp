@@ -1,204 +1,262 @@
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
+#include <stdlib.h>
+#include <string.h>
 #include <dlfcn.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include <linux/limits.h>
-#include <sys/mman.h>
 #include <sys/stat.h>
 
-//Steam API type definitions
+//Basic type definitions for convenience
+typedef unsigned char byte;
 typedef unsigned short uint16;
-typedef unsigned int uint32;
-typedef unsigned long uint64;
-struct CCallbackBase
+typedef long int32;
+typedef unsigned long uint32;
+typedef unsigned long long uint64;
+typedef void* ptr;
+typedef const void* cptr;
+typedef char* str;
+typedef const char* cstr;
+
+//Pointer util functions
+template<typename T> constexpr inline T* PtrOffset(ptr base, uint32 offset)
 {
-    virtual void Run(void* pvParam) = 0;
-    virtual void Run(void* pvParam, bool bIOFailure, uint64 hSteamAPICall) = 0;
-    virtual int GetCallbackSizeBytes() = 0;
-    unsigned char m_nCallbackFlags;
-    int m_iCallback;
+	return reinterpret_cast<T*>(reinterpret_cast<byte*>(base) + offset);
+}
+template<typename T> constexpr inline const T* PtrOffset(cptr base, uint32 offset)
+{
+	return reinterpret_cast<const T*>(reinterpret_cast<const byte*>(base) + offset);
+}
+
+//Steam API type definitions
+struct SteamInterface //Generic representation of a C++ interface
+{
+	cptr* VirtualMethodTable;
 };
-struct ISteamGameServer {};
-struct ISteamGameServerStats {};
-struct ISteamNetworking {};
-struct ISteamUtils {};
-#pragma pack(push, 8)
-struct GSClientApprove_t
+struct CallbackBase
 {
-    enum { k_iCallback = 201 };
-    uint64 m_SteamID;
-    uint64 m_OwnerSteamID;
+	virtual void Run(ptr parameter) = 0;
+	virtual void Run(ptr parameter, bool ioFailure, uint64 apiCallHandle) = 0;
+	virtual int32 GetCallbackSizeBytes() = 0;
+	byte CallbackFlags;
+	int CallbackIndex;
 };
-#pragma pack(pop)
-//Steam API function definitions
-typedef void (*SteamAPI_RegisterCallback_t)(CCallbackBase*, int);
-typedef void (*SteamAPI_UnregisterCallback_t)(CCallbackBase*);
-typedef void (*SteamGameServer_RunCallbacks_t)();
-typedef void (*SteamGameServer_Shutdown_t)();
-typedef void (*SetKeyValue_t)(ISteamGameServer*, const char*, const char*);
-typedef void (*SetGameData_t)(ISteamGameServer*, const char*);
+struct ClientApproveCallback
+{
+	uint64 SteamId;
+	uint64 OwnerSteamId;
+};
 
-//Global variables
-void* dlHandle; //Original Steam API dynamic library handle
-//Steam API interface pointers
-ISteamGameServer* pSteamGameServer;
-ISteamGameServerStats* pSteamGameServerStats;
-ISteamNetworking* pSteamNetworking;
-ISteamUtils* pSteamUtils;
-//Steam API original function pointers
-SteamAPI_RegisterCallback_t SteamAPI_RegisterCallback_o;
-SteamAPI_UnregisterCallback_t SteamAPI_UnregisterCallback_o;
-SteamGameServer_RunCallbacks_t SteamGameServer_RunCallbacks_o;
-SteamGameServer_Shutdown_t SteamGameServer_Shutdown_o;
-SetKeyValue_t SetKeyValue_o;
-SetGameData_t SetGameData_o;
-CCallbackBase* pClientApproveCallback; //Callback that needs to be executed when user login is approved
-char Description[2048]{}; //TEK Wrapper's server description line returned in Steam server queries. The format is "TEKWrapper [ActiveMods] [InfoFileUrl]", if a string for [] is missing "0" is inserted instead
+//Wrapper type definitions
+struct SteamInterfaceWrapper
+{
+	cptr* VirtualMethodTable; //Redirects to SteamApiInterface all functions that are not overridden
+	SteamInterface* SteamApiInterface; //Wrapped interface pointer
+	cptr VirtualMethodTableData[44]; //Every element should point to the according entry in RedirectFunctions unless overridden; 44 is the number of methods in version 012 of ISteamGameServer
+	//Contains 44 16-byte blocks of the following code:
+	//	mov rdi, qword ptr [rdi+8] ;Set SteamApiInterface as the first parameter
+	//	mov rax, qword ptr [rdi] ;Load original interace's virtual method table
+	//	jmp qword ptr [rax+n] ;n is the index of method in the table multiplied by 8
+	//	int3 padding until the end of 16-byte block
+	constexpr static byte RedirectFunctions[0x2C0] __attribute__((section(".text")))
+	{
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x20, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x08, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x10, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x18, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x20, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x28, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x30, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x38, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x40, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x48, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x50, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x58, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x60, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x68, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x70, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0x60, 0x78, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x80, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x88, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x90, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x98, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0xA0, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0xA8, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0xB0, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0xB8, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0xC0, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0xC8, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0xD0, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0xD8, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0xE0, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0xE8, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0xF0, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0xF8, 0x00, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x00, 0x01, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x08, 0x01, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x10, 0x01, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x18, 0x01, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x20, 0x01, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x28, 0x01, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x30, 0x01, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x38, 0x01, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x40, 0x01, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x48, 0x01, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x50, 0x01, 0x00, 0x00, 0xCC, 0xCC, 0xCC,
+		0x48, 0x8B, 0x7F, 0x08, 0x48, 0x8B, 0x07, 0xFF, 0xA0, 0x58, 0x01, 0x00, 0x00, 0xCC, 0xCC, 0xCC
+	};
+	constexpr inline void Initialize(SteamInterface* originalInterface)
+	{
+		SteamApiInterface = originalInterface;
+		VirtualMethodTable = VirtualMethodTableData;
+		for (uint32 i = 0; i < 44; ++i)
+			VirtualMethodTableData[i] = RedirectFunctions + i * 0x10;
+	}
+};
 
-//Local functions
-void SetKeyValue(ISteamGameServer* pThis, const char* pKey, const char* pValue)
-{
-    if (strcmp(pKey, "SEARCHKEYWORDS_s")) //SEARCHKEYWORDS_s is pretty much unused by ARK so it can be repurposed for TEK Wrapper needs
-        SetKeyValue_o(pThis, pKey, pValue);
-    else
-        SetKeyValue_o(pThis, pKey, Description);
-}
-void SetGameData(ISteamGameServer* pThis, const char* pchGameData)
-{
-    const size_t cchGameData = strlen(pchGameData);
-    char pchNewGameData[2048];
-    memcpy(pchNewGameData, pchGameData, cchGameData);
-    memcpy(pchNewGameData + cchGameData, ",TEKWrapper:1", 14); //This flag is required for server to be visible in TEK Launcher and game clients using TEK Injector
-    SetGameData_o(pThis, pchNewGameData);
-}
-bool SendUserConnectAndAuthenticate(ISteamGameServer* pThis, uint32 unIPClient, const void* pvAuthBlob, uint32 cubAuthBlobSize, uint64* pSteamIDUser)
-{
-    if (cubAuthBlobSize < 20)
-        return false;
-    *pSteamIDUser = *((const uint64*)((const char*)pvAuthBlob + 12)); //The original function would fail for most users so we just get Steam ID from auth blob and send GSClientApprove callback with it
-    GSClientApprove_t callback{ *pSteamIDUser, *pSteamIDUser };
-    pClientApproveCallback->Run(&callback);
-    return true;
-}
-int UserHasLicenseForApp() { return 0; } //0 means that user does have license
+//Globals
+void(*SteamAPI_RegisterCallback_o)(CallbackBase*, uint32); //Address of original SteamAPI_RegisterCallback obtained via dlsym
+str Description; //TEK Wrapper's server description line returned in Steam server queries. The format is "TEKWrapper {ActiveMods} {InfoFileUrl}", if {ActiveMods} or {InfoFileUrl} are missing they are replaced with "0"
+SteamInterfaceWrapper SteamGameServerWrapper;
+CallbackBase* ApproveCallback;
 
-//Functions that will be exported, matching signatures of all functions that the server imports from original libsteam_api.so
-extern "C" void SteamAPI_RegisterCallback(CCallbackBase* pCallback, int iCallback)
+//Steam API replacement functions
+#pragma GCC visibility push(hidden)
+void SetKeyValue(SteamInterfaceWrapper* iSteamGameServerWrapper, cstr key, cstr value)
 {
-    if (iCallback == 201) //Save GSClientApprove callback for further use
-        pClientApproveCallback = pCallback;
-    SteamAPI_RegisterCallback_o(pCallback, iCallback);
+	const uint64* const key64 = reinterpret_cast<const uint64*>(key); //Merely a reinterpretation to allow comparing 8 characters of key in one instruction
+	if (strlen(key) == 16 && key64[0] == 0x454B484352414553 && key64[1] == 0x735F5344524F5759) //~ key == "SEARCHKEYWORDS_s", this key is pretty much unused by ARK so it can be repurposed for TEK Wrapper's needs
+		reinterpret_cast<void(*)(SteamInterface*, cstr, cstr)>(iSteamGameServerWrapper->SteamApiInterface->VirtualMethodTable[20])(iSteamGameServerWrapper->SteamApiInterface, key, Description); //Forward call to original method with value set to Description
+	else
+		reinterpret_cast<void(*)(SteamInterface*, cstr, cstr)>(iSteamGameServerWrapper->SteamApiInterface->VirtualMethodTable[20])(iSteamGameServerWrapper->SteamApiInterface, key, value); //Forward call to original method with same parameters
 }
-extern "C" void SteamAPI_UnregisterCallback(CCallbackBase* pCallback) { SteamAPI_UnregisterCallback_o(pCallback); }
-extern "C" void* SteamApps() { return nullptr; } //While client interface accessors are imported from the library they are unused so null can be returned here
-extern "C" void* SteamFriends() { return nullptr; }
-extern "C" ISteamGameServer* SteamGameServer() { return pSteamGameServer; }
-extern "C" ISteamNetworking* SteamGameServerNetworking() { return pSteamNetworking; }
-extern "C" ISteamGameServerStats* SteamGameServerStats() { return pSteamGameServerStats; }
-extern "C" ISteamUtils* SteamGameServerUtils() { return pSteamUtils; }
-extern "C" bool SteamGameServer_Init(uint32 unIP, uint16 usSteamPort, uint16 usGamePort, uint16 usQueryPort, int eServerMode, const char* pchVersionString) //Since it's the first function called by server and it's called only once we can use it to initialize everything else
+void SetGameData(SteamInterfaceWrapper* iSteamGameServerWrapper, cstr gameData)
 {
-    //Retrieve command line first to search it for parameters
-    char buffer[4096]{};
-    char activeMods[1024]{ "0" };
-    char infoFileUrl[256]{ "0" };
-    int fd = open("/proc/self/cmdline", O_RDONLY);
-    const char* const end = buffer + read(fd, buffer, 4096);
-    close(fd);
-    for (const char* i = buffer; i < end;)
-    {
-        const char* occurrence = strstr(i, "?GameModIds=");
-        if (occurrence) //Parse mod list
-        {
-            occurrence += 12;
-            const char* occEnd = occurrence;
-            for (; *occEnd && *occEnd != '?'; ++occEnd);
-            memcpy(activeMods, occurrence, (size_t)(occEnd - occurrence));
-        }
-        else if (occurrence = strstr(i, "-TWInfoFileUrl=")) //Load info file URL
-        {
-            occurrence += 15;
-            memcpy(infoFileUrl, occurrence, strlen(occurrence));
-            break;
-        }
-        while (*i++); // Go to the next null-terminated section
-    }
-    //Try to find active mods list in GameUserSettings.ini if it wasn't found in command line
-    if (!strcmp(activeMods, "0"))
-    {
-        char pPath[PATH_MAX];
-        getcwd(pPath, PATH_MAX);
-        memcpy(pPath + strlen(pPath) - 14, "Saved/Config/LinuxServer/GameUserSettings.ini", 46);
-        struct stat statbuf;
-        if (stat(pPath, &statbuf) != -1)
-        {
-            if ((fd = open(pPath, O_RDONLY)) != -1)
-            {
-                char* const pFileBuffer = new char[statbuf.st_size + 1];
-                pFileBuffer[statbuf.st_size] = '\0';
-                if (read(fd, pFileBuffer, statbuf.st_size) > 0)
-                {
-                    const char* occurrence = strstr(pFileBuffer, "\nActiveMods=");
-                    if (occurrence)
-                    {
-                        occurrence += 12;
-                        const char* occEnd = occurrence;
-                        for (; *occEnd != '\r' && *occEnd != '\n'; ++occEnd);
-                        memcpy(activeMods, occurrence, (size_t)(occEnd - occurrence));
-                    }
-                }
-                delete[] pFileBuffer;
-                close(fd);
-            }
-        }
-    }
-    snprintf(Description, 2048, "TEKWrapper %s %s", activeMods, infoFileUrl); //Create description string
-    //Set Steam App ID to 346110
-    setenv("SteamAppId", "346110", 1);
-    setenv("GameAppId", "346110", 1);
-    //Load libsteam_api_o.so, which is the original Steam API
-    dlHandle = dlopen("libsteam_api_o.so", RTLD_LAZY);
-    if (!dlHandle)
-        return false;
-    //Import functions from it that will be used outside of the scope of this function
-    SteamAPI_RegisterCallback_o = (SteamAPI_RegisterCallback_t)dlsym(dlHandle, "SteamAPI_RegisterCallback");
-    SteamAPI_UnregisterCallback_o = (SteamAPI_UnregisterCallback_t)dlsym(dlHandle, "SteamAPI_UnregisterCallback");
-    SteamGameServer_RunCallbacks_o = (SteamGameServer_RunCallbacks_t)dlsym(dlHandle, "SteamGameServer_RunCallbacks");
-    SteamGameServer_Shutdown_o = (SteamGameServer_Shutdown_t)dlsym(dlHandle, "SteamGameServer_Shutdown");
-    //Call the original SteamGameServer_Init with the same parameters and retrieve interfaces from there
-    if (!((bool(*)(uint32, uint16, uint16, uint16, int, const char*))dlsym(dlHandle, "SteamGameServer_Init"))(unIP, usSteamPort, usGamePort, usQueryPort, eServerMode, pchVersionString))
-        return false;
-    pSteamGameServer = ((ISteamGameServer*(*)())dlsym(dlHandle, "SteamGameServer"))();
-    pSteamGameServerStats = ((ISteamGameServerStats*(*)())dlsym(dlHandle, "SteamGameServerStats"))();
-    pSteamNetworking = ((ISteamNetworking*(*)())dlsym(dlHandle, "SteamGameServerNetworking"))();
-    pSteamUtils = ((ISteamUtils*(*)())dlsym(dlHandle, "SteamGameServerUtils"))();
-    //Override some ISteamGameServer functions with my own
-    void** vfptr = *(void***)pSteamGameServer;
-    //But make its virtual function table memory page writable first
-    const long pageSize = sysconf(_SC_PAGESIZE); //Get page size so we can compute base address of the page that needs to be modifed
-    mprotect((void*)((long)vfptr & (~(pageSize - 1))), pageSize, PROT_READ | PROT_WRITE | PROT_EXEC); //And change page's protection
-    SetKeyValue_o = (SetKeyValue_t)vfptr[20];
-    SetGameData_o = (SetGameData_t)vfptr[22];
-    vfptr[20] = (void*)SetKeyValue;
-    vfptr[22] = (void*)SetGameData;
-    vfptr[24] = (void*)SendUserConnectAndAuthenticate;
-    vfptr[32] = (void*)UserHasLicenseForApp;
-    return true;
+	const size_t gameDataSize = strlen(gameData);
+	const str newGameData = new char[gameDataSize + 14];
+	memcpy(newGameData, gameData, gameDataSize);
+	memcpy(newGameData + gameDataSize, ",TEKWrapper:1", 14); //This flag is required for server to be visible in TEK Launcher and game clients that use ARK Shellcode
+	reinterpret_cast<void(*)(SteamInterface*, cstr)>(iSteamGameServerWrapper->SteamApiInterface->VirtualMethodTable[22])(iSteamGameServerWrapper->SteamApiInterface, newGameData);
+	delete[] newGameData;
 }
-extern "C" void SteamGameServer_RunCallbacks() { SteamGameServer_RunCallbacks_o(); }
-extern "C" void SteamGameServer_Shutdown()
+bool SendUserConnectAndAuthenticate(SteamInterfaceWrapper* iSteamGameServerWrapper, uint32 clientIp, cptr authBlob, uint32 authBlobSize, uint64& steamId)
 {
-    SteamGameServer_Shutdown_o();
-    dlclose(dlHandle);
+	if (authBlobSize < 20)
+		return false;
+	if (!reinterpret_cast<bool(*)(SteamInterface*, uint32, cptr, uint32, uint64&)>(iSteamGameServerWrapper->SteamApiInterface->VirtualMethodTable[24])(iSteamGameServerWrapper->SteamApiInterface, clientIp, authBlob, authBlobSize, steamId))
+	{
+		//Steam denied connection, but we won't
+		steamId = *PtrOffset<uint64>(authBlob, 12);
+		ClientApproveCallback callback { steamId, steamId };
+		ApproveCallback->Run(&callback);
+	}
+	return true;
 }
-extern "C" void* SteamInventory() { return nullptr; }
-extern "C" void* SteamMatchmaking() { return nullptr; }
-extern "C" void* SteamMatchmakingServers() { return nullptr; }
-extern "C" void* SteamNetworking() { return nullptr; }
-extern "C" void* SteamRemoteStorage() { return nullptr; }
-extern "C" void* SteamUGC() { return nullptr; }
-extern "C" void* SteamUser() { return nullptr; }
-extern "C" void* SteamUserStats() { return nullptr; }
-extern "C" void* SteamUtils() { return nullptr; }
+int32 UserHasLicenseForApp() { return 0; } //0 means that user does have license
+#pragma GCC visibility pop
+extern "C"
+{
+	void SteamAPI_RegisterCallback(CallbackBase* callback, uint32 callbackIndex)
+	{
+		if (callbackIndex == 201)
+			ApproveCallback = callback; //Save it for further use
+		if (callbackIndex != 202) //Deny denial callback
+			SteamAPI_RegisterCallback_o(callback, callbackIndex);
+	}
+	bool SteamGameServer_Init(uint32 ip, uint16 steamPort, uint16 gamePort, uint16 queryPort, int serverMode, cstr versionString)
+	{
+		cstr activeMods = new char[1] { '0' };
+		size_t activeModsSize = 1;
+		cstr infoFileUrl = new char[1] { '0' };
+		size_t infoFileUrlSize = 1;
+		str buffer = new char[0x1000];
+		//Search command line for parameters
+		int fd = open("/proc/self/cmdline", O_RDONLY);
+		const cstr end = buffer + read(fd, buffer, 0x1000);
+		close(fd);
+		for (cstr i = buffer; i < end;)
+		{
+		    cstr occurrence = strstr(i, "?GameModIds=");
+		    if (occurrence)
+		    {
+				occurrence += 12;
+		        cstr occEnd = occurrence;
+		        for (; *occEnd && *occEnd != '?'; ++occEnd) {}
+				activeModsSize = occEnd - occurrence;
+				str activeModsBuffer = new char[activeModsSize];
+				memcpy(activeModsBuffer, occurrence, activeModsSize);
+				delete[] activeMods;
+				activeMods = activeModsBuffer;
+		    }
+		    else if ((occurrence = strstr(i, "-TWInfoFileUrl="))) //Load info file URL
+		    {
+				occurrence += 15;
+				infoFileUrlSize = strlen(occurrence);
+				str infoFileUrlBuffer = new char[infoFileUrlSize];
+				memcpy(infoFileUrlBuffer, occurrence, infoFileUrlSize);
+				delete[] infoFileUrl;
+				infoFileUrl = infoFileUrlBuffer;
+		        break;
+		    }
+		    while (*i++); // Go to the next null-terminated section
+		}
+		if (activeModsSize == 1) //Search GameUserSettings.ini for ActiveMods
+		{
+		    if (!getcwd(buffer, 0x1000)) {}
+		    memcpy(buffer + strlen(buffer) - 14, "Saved/Config/LinuxServer/GameUserSettings.ini", 46);
+		    struct stat statbuf;
+		    if (stat(buffer, &statbuf) >= 0 && (fd = open(buffer, O_RDONLY)) >= 0)
+		    {
+				str fileBuffer = new char[statbuf.st_size + 1];
+				fileBuffer[statbuf.st_size] = '\0';
+				if (read(fd, fileBuffer, statbuf.st_size) > 0)
+				{
+					cstr occurrence = strstr(fileBuffer, "\nActiveMods=");
+					if (occurrence)
+					{
+						occurrence += 12;
+						cstr occEnd = occurrence;
+						for (; *occEnd && *occEnd != '\r' && *occEnd != '\n'; ++occEnd) {}
+						activeModsSize = occEnd - occurrence;
+						str activeModsBuffer = new char[activeModsSize];
+						memcpy(activeModsBuffer, occurrence, activeModsSize);
+						delete[] activeMods;
+						activeMods = activeModsBuffer;
+					}
+				}
+				delete[] fileBuffer;
+				close(fd);
+		    }
+		}
+		delete[] buffer;
+		//Create description string
+		const size_t descriptionBufferSize = 13 + activeModsSize + infoFileUrlSize;
+		const str descriptionBuffer = new char[descriptionBufferSize];
+		descriptionBuffer[descriptionBufferSize - 1] = '\0';
+		descriptionBuffer[11 + activeModsSize] = ' ';
+		memcpy(descriptionBuffer, "TEKWrapper ", 11);
+		memcpy(descriptionBuffer + 11, activeMods, activeModsSize);
+		memcpy(descriptionBuffer + 12 + activeModsSize, infoFileUrl, infoFileUrlSize);
+		delete[] activeMods;
+		delete[] infoFileUrl;
+		Description = descriptionBuffer;
+		//Set Steam app ID to 346110
+		setenv("SteamAppId", "346110", 1);
+		setenv("GameAppId", "346110", 1);
+		//Open libsteam_api_o.so to load original function addresses from it
+		const ptr dlHandle = dlopen("libsteam_api_o.so", RTLD_LAZY | RTLD_NOLOAD);
+		SteamAPI_RegisterCallback_o = reinterpret_cast<void(*)(CallbackBase*, uint32)>(dlsym(dlHandle, "SteamAPI_RegisterCallback"));
+		ptr steamGameServer_Init = dlsym(dlHandle, "SteamGameServer_Init");
+		dlclose(dlHandle);
+		//Call original SteamGameServer_Init to initialize interfaces
+		const bool initSucceeded = reinterpret_cast<bool(*)(uint32, uint16, uint16, uint16, int, cstr)>(steamGameServer_Init)(ip, steamPort, gamePort, queryPort, serverMode, versionString);
+		if (!initSucceeded)
+			return false;
+		//Wrap ISteamGameServer interface and redirect methods
+		SteamGameServerWrapper.Initialize(*PtrOffset<SteamInterface*>(steamGameServer_Init, 0x209384)); //0x209384 is offset from beginning of SteamGameServer_Init function to Steam API's internal variable that holds ISteamGameServer pointer. ARK never updates libsteam_api.so so such trick is working without risks
+		*PtrOffset<SteamInterfaceWrapper*>(steamGameServer_Init, 0x209384) = &SteamGameServerWrapper;
+		SteamGameServerWrapper.VirtualMethodTableData[20] = reinterpret_cast<cptr>(SetKeyValue);
+		SteamGameServerWrapper.VirtualMethodTableData[22] = reinterpret_cast<cptr>(SetGameData);
+		SteamGameServerWrapper.VirtualMethodTableData[24] = reinterpret_cast<cptr>(SendUserConnectAndAuthenticate);
+		SteamGameServerWrapper.VirtualMethodTableData[32] = reinterpret_cast<cptr>(UserHasLicenseForApp);
+		return true;
+	}
+}
