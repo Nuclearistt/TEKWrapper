@@ -242,10 +242,9 @@ extern "C"
 		setenv("SteamAppId", "346110", 1);
 		setenv("GameAppId", "346110", 1);
 		//Open libsteam_api_o.so to load original function addresses from it
-		const ptr dlHandle = dlopen("libsteam_api_o.so", RTLD_LAZY | RTLD_NOLOAD);
+		const ptr dlHandle = dlopen("libsteam_api_o.so", RTLD_LAZY | RTLD_GLOBAL);
 		SteamAPI_RegisterCallback_o = reinterpret_cast<void(*)(CallbackBase*, uint32)>(dlsym(dlHandle, "SteamAPI_RegisterCallback"));
 		ptr steamGameServer_Init = dlsym(dlHandle, "SteamGameServer_Init");
-		dlclose(dlHandle);
 		//Call original SteamGameServer_Init to initialize interfaces
 		const bool initSucceeded = reinterpret_cast<bool(*)(uint32, uint16, uint16, uint16, int, cstr)>(steamGameServer_Init)(ip, steamPort, gamePort, queryPort, serverMode, versionString);
 		if (!initSucceeded)

@@ -7,18 +7,21 @@ TEK Wrapper is a library for ARK: Survival Evolved dedicated server that allows 
 
 ## How to use
 
-1. Setup a dedicated server unless you have already done it, the wiki has a good [tutorial](https://ark.wiki.gg/wiki/Dedicated_server_setup) for that. **Do not** install TEK Wrapper on your client installation if you use TEK Launcher to run the game, it doesn't allow steam_api64.dll modifications, and it is a good practice in general to install dedicated server separately
-2. Download the library file (steam_api64.dll if your server runs on Windows or libsteam_api.so if it runs on Linux) in [releases](https://github.com/Nuclearistt/TEKWrapper/releases)
-3. (**{Server root}** below is your dedicated server installation folder)  
+1. Setup a dedicated server, the wiki has a good [tutorial](https://ark.wiki.gg/wiki/Dedicated_server_setup) for that. **Do not** install TEK Wrapper on your client installation (the game that you play), if you use TEK Launcher to run the game, it doesn't allow steam_api64.dll modifications, and it is a good practice in general to install dedicated server separately
+2. (**{Server root}** below is placeholder for your dedicated server installation folder)  
   **For Windows-run servers**: 
    - Go to **{Server root}\Engine\Binaries\ThirdParty\Steamworks\Steamv132\Win64** folder, there rename **steam_api64.dll** to **steam_api64_o.dll** and move it to **{Server root}\ShooterGame\Binaries\Win64** folder
-   - Put the **steam_api64.dll** you downloaded in step 2 into **{Server root}\Engine\Binaries\ThirdParty\Steamworks\Steamv132\Win64** folder
+   - Download the latest released TEK Wrapper library file [here](https://github.com/Nuclearistt/TEKWrapper/releases/latest/download/steam_api64.dll) and put it into **{Server root}\Engine\Binaries\ThirdParty\Steamworks\Steamv132\Win64** folder
 
    **For Linux-run servers**:
    - Go to **{Server root}/Engine/Binaries/Linux** folder, there rename **libsteam_api.so** to **libsteam_api_o.so**
-   - Put the **libsteam_api.so** you downloaded in step 2 into **{Server root}/Engine/Binaries/Linux** folder
-4. Make sure to have *-NoBattlEye* in server command-line arguments, ARK Shellcode for client side doesn't support BattlEye so enabling it would neglect the main feature of TEK Wrapper
-5. If you want to provide extra information about your server/cluster to be displayed in TEK Launcher, add *-TWInfoFileUrl=url* to its command-line arguments (for example: *-TWInfoFileUrl=https://example.com/Info.json*). The URL must point to a valid json file or **direct** download link for one, that can be accessed by any outside user. The format of the file is described in next section. If you host a cluster, it's recommended to use the same file URL for all servers of the cluster if they have the same description and naming policy, TEK Launcher takes advantage of that by caching the file so it doesn't have to be downloaded multiple times
+   - Download source code for TEK Wrapper <a href="https://raw.githubusercontent.com/Nuclearistt/TEKWrapper/main/TEKWrapperLinux/TEKWrapperLinux.cpp" download>here</a> and run the following commands to build it (assuming that gcc is installed on your system):
+   ```bash
+   g++ -c -x c++ TEKWrapperLinux.cpp -g1 -o TEKWrapperLinux.o  -O3 -fno-strict-aliasing -flto -fomit-frame-pointer -DNDEBUG -fpic -fthreadsafe-statics -fexceptions -fno-rtti -std=c++20 && g++ -o libsteam_api.so -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -shared -Wl,--no-as-needed TEKWrapperLinux.o && rm TEKWrapperLinux.o
+   ```
+   - Put produced **libsteam_api.so** into **{Server root}/Engine/Binaries/Linux** folder
+3. Make sure to have *-NoBattlEye* in server command-line arguments, ARK Shellcode for client side doesn't support BattlEye so enabling it would neglect the main feature of TEK Wrapper
+4. If you want to provide extra information about your server/cluster to be displayed in TEK Launcher, add *-TWInfoFileUrl=url* to its command-line arguments (for example: *-TWInfoFileUrl=https://example.com/Info.json*). The URL must point to a valid json file or **direct** download link for one, that can be accessed by any outside user. The format of the file is described in next section. If you host a cluster, it's recommended to use the same file URL for all servers of the cluster if they have the same description and naming policy, TEK Launcher takes advantage of that by caching the file so it doesn't have to be downloaded multiple times
 
 ## Server info file format
 
@@ -79,7 +82,7 @@ Every property in the object is optional, so you can remove any property that yo
 
 ## How does it work?
 
-TEK Wrapper binaries forward all function calls that are not wrapped by it to the original Steam API. On Windows it's achieved by making the same DLL export table as in the original Steam API DLL except that its elements point to functions with the same name in steam_api64_o.dll (which implicitly links it) with exception for wrapped functions that are implemented in TEK Wrapper's dll and call their real counterparts via entries in import table. On Linux there is no separation between exported and imported symbols, so TEKWrapper's binary just doesn't define any symbols it doesn't wrap and specifies libsteam_api_o.so as "needed" in its dynamic section, so it'll be loaded by dynamic linker and server's lookup for other symbols will end up there; addresses for real counterparts of wrapper functions are obtained via dlopen and dlsym. SteamAPI_RegisterCallback's wrapper prevents registering GSClientDeny callback and intercepts pointer of GSClientApprove callback for further use. SteamGameServer_Init's wrapper loads mods list and info file URL if present and constructs description line to be sent in Steam server queries, then initializes Steam API and replaces DLL's internal pointer to ISteamGameServer with a wrapper that overrides certain method calls with calls to its own functions and redirects the others to original interface
+TEK Wrapper binaries forward all function calls that are not wrapped by it to the original Steam API. On Windows it's achieved by making the same DLL export table as in the original Steam API DLL except that its elements point to functions with the same name in steam_api64_o.dll (which implicitly links it) with exception for wrapped functions that are implemented in TEK Wrapper's dll and call their real counterparts via entries in import table. On Linux there is no separation between exported and imported symbols, so TEKWrapper's binary just doesn't define any symbols it doesn't wrap and loads libsteam_api_o.so via dlopen, so server's lookup for other symbols will end up there; addresses for real counterparts of wrapper functions are obtained via dlsym. SteamAPI_RegisterCallback's wrapper prevents registering GSClientDeny callback and intercepts pointer of GSClientApprove callback for further use. SteamGameServer_Init's wrapper loads mods list and info file URL if present and constructs description line to be sent in Steam server queries, then initializes Steam API and replaces DLL's internal pointer to ISteamGameServer with a wrapper that overrides certain method calls with calls to its own functions and redirects the others to original interface
 
 ## License
 
